@@ -6,7 +6,7 @@
 }:
 
 let
-  cfg = config.services.nix-sweep;
+  nixSweepConfig = config.services.nix-sweep; # CORRECTED: Local variable now uses 'nixSweepConfig'
 
   # --- Configuration Option Definitions (Helper) ---
   mkPresetOptions =
@@ -99,7 +99,6 @@ let
       "gc-bigger" = filter "gc-bigger" preset.gcBigger;
       "gc-quota" = filter "gc-quota" preset.gcQuota;
       "gc-modest" = filter "gc-modest" preset.gcModest;
-      # NOTE: 'profiles' is NOT included here as it is not a TOML field, but a CLI argument.
     };
 
   # Use the guaranteed YAML generator, as toTOML is missing in the current Nixpkgs version.
@@ -126,7 +125,7 @@ in
       type = lib.types.submodule (mkPresetOptions {
         defaultProfiles = [ "system" ];
       });
-      visible = cfg.enableDefaultPreset;
+      visible = nixSweepConfig.enableDefaultPreset;
       default = { };
       description = "Configuration for the 'default' preset.";
     };
@@ -143,12 +142,13 @@ in
   };
 
   # --- CONFIGURATION IMPLEMENTATION ---
-  config = lib.mkIf cfg.enable {
+  config = lib.mkIf nixSweepConfig.enable {
     # 1. Collect and Map all Presets
     environment.etc."nix-sweep/presets.toml".source =
       let
         enabledPresets =
-          (if cfg.enableDefaultPreset then { "default" = cfg.defaultPreset; } else { }) // cfg.presets;
+          (if nixSweepConfig.enableDefaultPreset then { "default" = nixSweepConfig.defaultPreset; } else { })
+          // nixSweepConfig.presets;
 
         # Map the Nix preset structures to a structure suitable for YAML
         yamlPresets = lib.mapAttrs (name: preset: toTomlPreset preset) enabledPresets;
@@ -168,11 +168,10 @@ in
 
           # 2. Use yq to convert the YAML content to TOML format.
           # -P flag forces the output to be TOML (used to be -t in older versions, but -P is now preferred for TOML)
-          # The -y flag ensures yq treats the input as YAML (though typically implied)
           ${pkgs.yq}/bin/yq -P < presets.yaml > $out
         '';
 
     # 2. Add a dependency on the package to ensure it exists
-    environment.systemPackages = [ cfg.package ];
+    environment.systemPackages = [ nixSweepConfig.package ];
   };
 }
